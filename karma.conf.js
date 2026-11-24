@@ -14,8 +14,10 @@ module.exports = function (config) {
     files: [
       'node_modules/leaflet/dist/leaflet.css',
       'node_modules/leaflet/dist/leaflet-src.js',
+      'node_modules/leaflet.markercluster/dist/leaflet.markercluster.js',
       'node_modules/esri-leaflet/dist/esri-leaflet-debug.js',
       'node_modules/leaflet-shape-markers/dist/leaflet-shape-markers.js',
+      'node_modules/esri-leaflet-cluster/dist/esri-leaflet-cluster-debug.js',
       'dist/esri-leaflet-renderers-debug.js',
       'spec/**/*.js'
     ],

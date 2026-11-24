@@ -1,4 +1,4 @@
-/* esri-leaflet-renderers - v3.0.1 - Mon Nov 09 2026 17:45:30 GMT+0500 (Kazakhstan Time)
+/* esri-leaflet-renderers - v3.0.1 - Tue Nov 24 2026 11:16:28 GMT+0100 (Central European Standard Time)
  * Copyright (c) 2026 Environmental Systems Research Institute, Inc.
  * Apache-2.0 */
 (function (global, factory) {
@@ -1457,31 +1457,90 @@
       return new L__default["default"].PolylineDecorator(paths, options);
   };
 
-  function getPlacements(placement) {
+  L__default["default"].Symbol.ArrowHead = L__default["default"].Symbol.ArrowHead.extend({
+    _buildArrowPath: function (dirPoint, map) {
+      const d2r = Math.PI / 180;
+      const tipPoint = map.project(dirPoint.latLng);
+      const direction = -(dirPoint.heading - 90) * d2r;
+      const radianArrowAngle = (this.options.headAngle / 2) * d2r;
+
+      const headAngle1 = direction + radianArrowAngle;
+      const headAngle2 = direction - radianArrowAngle;
+
+      const pixelSize = this.options.pixelSize || 0;
+
+      const arrowHead = L__default["default"].point(
+        tipPoint.x + pixelSize / 2 * Math.cos(direction),
+        tipPoint.y - pixelSize / 2 * Math.sin(direction)
+      );
+      const arrowHead1 = L__default["default"].point(
+        arrowHead.x - pixelSize * Math.cos(headAngle1),
+        arrowHead.y + pixelSize * Math.sin(headAngle1)
+      );
+      const arrowHead2 = L__default["default"].point(
+        arrowHead.x - pixelSize * Math.cos(headAngle2),
+        arrowHead.y + pixelSize * Math.sin(headAngle2)
+      );
+
+      return [
+        map.unproject(arrowHead1),
+        map.unproject(arrowHead),
+        map.unproject(arrowHead2),
+        map.unproject(tipPoint)
+      ];
+    }
+  });
+
+  function getPlacements (placement) {
     switch (placement) {
-      case "begin":
-        return [0];
+      case 'begin':
+        return [{ offset: 0, reverse: true }];
 
-      case "end":
-        return ["100%"];
+      case 'end':
+        return [{ offset: '100%', reverse: false }];
 
-      case "begin-end":
-        return [0, "100%"];
+      case 'begin-end':
+        return [
+          { offset: 0, reverse: true },
+          { offset: '100%', reverse: false }
+        ];
 
       default:
         return [];
     }
   }
 
-  function getArrowPatterns(marker, symbol, styles) {
-    var placements = getPlacements(marker.placement || "end");
+  function reverseArrowHeading (arrow) {
+    return {
+      options: arrow.options,
+      buildSymbol: function (directionPoint, latLngs, map, index, total) {
+        return arrow.buildSymbol(
+          {
+            latLng: directionPoint.latLng,
+            heading: (directionPoint.heading + 180) % 360
+          },
+          latLngs,
+          map,
+          index,
+          total
+        );
+      }
+    };
+  }
+
+  function getArrowPatterns (marker, symbol, styles, layerOptions) {
+    var placements = getPlacements(marker.placement || 'end');
 
     if (!placements.length) {
       return [];
     }
 
-    var color = styles.color || "#3388ff";
-    var opacity = styles.opacity === undefined ? 1 : styles.opacity;
+    var color = styles.color !== undefined
+      ? styles.color
+      : (layerOptions.color !== undefined ? layerOptions.color : '#3388ff');
+    var opacity = styles.opacity !== undefined
+      ? styles.opacity
+      : (layerOptions.opacity !== undefined ? layerOptions.opacity : 1);
 
     if (marker.color) {
       color = symbol.colorValue(marker.color);
@@ -1489,45 +1548,58 @@
     }
 
     // ArcGIS size is expressed in points; Leaflet uses pixels.
-    var pixelSize = !isNaN(marker.size) ? symbol.pixelValue(marker.size) : 15;
+    var lineWeight = styles.weight !== undefined ? styles.weight : layerOptions.weight;
+    var pixelSize = !isNaN(marker.size)
+      ? symbol.pixelValue(marker.size)
+      : (!isNaN(lineWeight) ? lineWeight * 5 : 15);
+
+    var pathOptions = {
+      stroke: false,
+      fill: true,
+      color: color,
+      fillColor: color,
+      opacity: opacity,
+      fillOpacity: opacity,
+      interactive: false,
+      className: 'esri-arrow-marker'
+    };
+
+    if (layerOptions.pane !== undefined) {
+      pathOptions.pane = layerOptions.pane;
+    }
+    if (layerOptions.renderer !== undefined) {
+      pathOptions.renderer = layerOptions.renderer;
+    }
 
     var arrow = L__default["default"].Symbol.arrowHead({
       pixelSize: pixelSize,
       polygon: true,
-      pathOptions: {
-        stroke: false,
-        fill: true,
-        color: color,
-        fillColor: color,
-        opacity: opacity,
-        fillOpacity: opacity,
-        interactive: false,
-      },
+      pathOptions: pathOptions
     });
 
-    return placements.map(function (offset) {
+    return placements.map(function (placement) {
       return {
-        offset: offset,
+        offset: placement.offset,
         repeat: 0,
-        symbol: arrow,
+        symbol: placement.reverse ? reverseArrowHeading(arrow) : arrow
       };
     });
   }
 
-  function attachArrowMarker(layer, feature, renderer) {
+  function attachArrowMarker (layer, feature, renderer) {
     if (!layer || !renderer || !feature.geometry) {
       return null;
     }
 
     var geometryType = feature.geometry.type;
 
-    if (geometryType !== "LineString" && geometryType !== "MultiLineString") {
+    if (geometryType !== 'LineString' && geometryType !== 'MultiLineString') {
       return null;
     }
 
     var symbol = renderer._getSymbol(feature);
 
-    if (!symbol || !symbol._marker || symbol._marker.style !== "arrow") {
+    if (!symbol || !symbol._marker || symbol._marker.style !== 'arrow') {
       return null;
     }
 
@@ -1535,7 +1607,7 @@
     var initialStyles = renderer.style(feature);
 
     var decorator = L__default["default"].polylineDecorator(layer, {
-      patterns: getArrowPatterns(marker, symbol, initialStyles),
+      patterns: getArrowPatterns(marker, symbol, initialStyles, layer.options)
     });
 
     // Keep decorator synchronized with the feature's style.
@@ -1546,7 +1618,9 @@
       layer.setStyle = function (styles) {
         originalSetStyle.call(this, styles);
 
-        decorator.setPatterns(getArrowPatterns(marker, symbol, styles || {}));
+        decorator.setPatterns(
+          getArrowPatterns(marker, symbol, styles || {}, this.options)
+        );
 
         return this;
       };
@@ -1554,7 +1628,7 @@
 
     // A feature can be removed from the map and added again because
     // FeatureLayer caches layers between viewport requests.
-    layer.on("add", function () {
+    layer.on('add', function () {
       if (layer._map && decorator._map !== layer._map) {
         if (decorator._map) {
           decorator.remove();
@@ -1564,7 +1638,7 @@
       }
     });
 
-    layer.on("remove", function () {
+    layer.on('remove', function () {
       if (decorator._map) {
         decorator.remove();
       }
@@ -1573,24 +1647,22 @@
     return decorator;
   }
 
-  function wireUpRenderers() {
+  function wireUpRenderers () {
     if (this.options.ignoreRenderer) {
       return;
     }
     var oldOnAdd = L$1.Util.bind(this.onAdd, this);
     var oldUnbindPopup = L$1.Util.bind(this.unbindPopup, this);
     var oldOnRemove = L$1.Util.bind(this.onRemove, this);
-    var oldUpdateLayer = L$1.Util.bind(this._updateLayer, this);
 
     L$1.Util.bind(this.createNewLayer, this);
 
     this.onAdd = function (map) {
       this.metadata(function (error, response) {
         if (error) {
-          console.warn("failed to load metadata from the service.");
+          console.warn('failed to load metadata from the service.');
           return;
-        }
-        if (response && response.drawingInfo) {
+        } if (response && response.drawingInfo) {
           if (this.options.drawingInfo) {
             // allow L.esri.webmap (and others) to override service symbology with info provided in layer constructor
             response.drawingInfo = this.options.drawingInfo;
@@ -1598,10 +1670,10 @@
 
           // the default pane for lines and polygons is 'overlayPane', for points it is 'markerPane'
           if (
-            this.options.pane === "overlayPane" &&
-            response.geometryType === "esriGeometryPoint"
+            this.options.pane === 'overlayPane' &&
+            response.geometryType === 'esriGeometryPoint'
           ) {
-            this.options.pane = "markerPane";
+            this.options.pane = 'markerPane';
           }
 
           this._setRenderers(response);
@@ -1631,13 +1703,16 @@
       }
     };
 
-    this._updateLayer = function (layer, geojson) {
-      oldUpdateLayer(layer, geojson);
+    if (typeof this._updateLayer === 'function') {
+      var oldUpdateLayer = L$1.Util.bind(this._updateLayer, this);
+      this._updateLayer = function (layer, geojson) {
+        oldUpdateLayer(layer, geojson);
 
-      if (layer && layer._esriArrowDecorator) {
-        layer._esriArrowDecorator.setPaths(layer);
-      }
-    };
+        if (layer && layer._esriArrowDecorator) {
+          layer._esriArrowDecorator.setPaths(layer);
+        }
+      };
+    }
 
     this._addPointLayer = function (map) {
       if (this._pointLayer) {
@@ -1669,7 +1744,7 @@
         fLayer._esriArrowDecorator = attachArrowMarker(
           fLayer,
           geojson,
-          this._renderer,
+          this._renderer
         );
       }
 
@@ -1681,7 +1756,6 @@
           this._createPointLayer();
 
           var featureId = geojson.id.toString();
-
           // only add the feature if it does not already exist on the map
           if (!this._pointLayerIds[featureId]) {
             var pointjson = this.getPointJson(geojson, centroid);
@@ -1693,7 +1767,6 @@
           this._pointLayer.bringToFront();
         }
       }
-
       return fLayer;
     };
 
@@ -1712,11 +1785,10 @@
       var f;
 
       for (var i = 0, j = nPts - 1; i < nPts; j = i++) {
-        p1 = pts[i];
-        p2 = pts[j];
+        p1 = pts[i]; p2 = pts[j];
         twicearea += p1[0] * p2[1];
         twicearea -= p1[1] * p2[0];
-        f = p1[0] * p2[1] - p2[0] * p1[1];
+        f = (p1[0] * p2[1]) - (p2[0] * p1[1]);
         x += (p1[0] + p2[0]) * f;
         y += (p1[1] + p2[1]) * f;
       }
@@ -1726,26 +1798,26 @@
 
     this.getPointJson = function (geojson, centroid) {
       return {
-        type: "Feature",
+        type: 'Feature',
         properties: geojson.properties,
         id: geojson.id,
         geometry: {
-          type: "Point",
-          coordinates: [centroid[0], centroid[1]],
-        },
+          type: 'Point',
+          coordinates: [centroid[0], centroid[1]]
+        }
       };
     };
 
     this._checkForProportionalSymbols = function (geometryType, renderer) {
       this._hasProportionalSymbols = false;
-      if (geometryType === "esriGeometryPolygon") {
+      if (geometryType === 'esriGeometryPolygon') {
         if (renderer.backgroundFillSymbol) {
           this._hasProportionalSymbols = true;
         }
         // check to see if the first symbol in the classbreaks is a marker symbol
         if (renderer.classBreakInfos && renderer.classBreakInfos.length) {
           var sym = renderer.classBreakInfos[0].symbol;
-          if (sym && (sym.type === "esriSMS" || sym.type === "esriPMS")) {
+          if (sym && (sym.type === 'esriSMS' || sym.type === 'esriPMS')) {
             this._hasProportionalSymbols = true;
           }
         }
@@ -1757,7 +1829,7 @@
       var rendererInfo = serviceInfo.drawingInfo.renderer;
 
       var options = {
-        url: this.options.url,
+        url: this.options.url
       };
 
       if (this.options.token) {
@@ -1777,11 +1849,8 @@
       }
 
       switch (rendererInfo.type) {
-        case "classBreaks":
-          this._checkForProportionalSymbols(
-            serviceInfo.geometryType,
-            rendererInfo,
-          );
+        case 'classBreaks':
+          this._checkForProportionalSymbols(serviceInfo.geometryType, rendererInfo);
           if (this._hasProportionalSymbols) {
             this._createPointLayer();
             var pRend = classBreaksRenderer(rendererInfo, options);
@@ -1790,7 +1859,7 @@
           }
           rend = classBreaksRenderer(rendererInfo, options);
           break;
-        case "uniqueValue":
+        case 'uniqueValue':
           rend = uniqueValueRenderer(rendererInfo, options);
           break;
         default:
@@ -1804,10 +1873,7 @@
 
   EsriLeaflet__namespace.FeatureLayer.addInitHook(wireUpRenderers);
 
-  if (
-    typeof EsriLeafletCluster__default["default"] !== "undefined" &&
-    EsriLeafletCluster.FeatureLayer
-  ) {
+  if (typeof EsriLeafletCluster__default["default"] !== 'undefined' && EsriLeafletCluster.FeatureLayer) {
     EsriLeafletCluster.FeatureLayer.addInitHook(wireUpRenderers);
   }
 

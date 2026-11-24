@@ -1,31 +1,90 @@
-import L from "leaflet";
-import "leaflet-polylinedecorator/src/L.PolylineDecorator";
+import L from 'leaflet';
+import 'leaflet-polylinedecorator/src/L.PolylineDecorator';
 
-function getPlacements(placement) {
+L.Symbol.ArrowHead = L.Symbol.ArrowHead.extend({
+  _buildArrowPath: function (dirPoint, map) {
+    const d2r = Math.PI / 180;
+    const tipPoint = map.project(dirPoint.latLng);
+    const direction = -(dirPoint.heading - 90) * d2r;
+    const radianArrowAngle = (this.options.headAngle / 2) * d2r;
+
+    const headAngle1 = direction + radianArrowAngle;
+    const headAngle2 = direction - radianArrowAngle;
+
+    const pixelSize = this.options.pixelSize || 0;
+
+    const arrowHead = L.point(
+      tipPoint.x + pixelSize / 2 * Math.cos(direction),
+      tipPoint.y - pixelSize / 2 * Math.sin(direction)
+    );
+    const arrowHead1 = L.point(
+      arrowHead.x - pixelSize * Math.cos(headAngle1),
+      arrowHead.y + pixelSize * Math.sin(headAngle1)
+    );
+    const arrowHead2 = L.point(
+      arrowHead.x - pixelSize * Math.cos(headAngle2),
+      arrowHead.y + pixelSize * Math.sin(headAngle2)
+    );
+
+    return [
+      map.unproject(arrowHead1),
+      map.unproject(arrowHead),
+      map.unproject(arrowHead2),
+      map.unproject(tipPoint)
+    ];
+  }
+});
+
+function getPlacements (placement) {
   switch (placement) {
-    case "begin":
-      return [0];
+    case 'begin':
+      return [{ offset: 0, reverse: true }];
 
-    case "end":
-      return ["100%"];
+    case 'end':
+      return [{ offset: '100%', reverse: false }];
 
-    case "begin-end":
-      return [0, "100%"];
+    case 'begin-end':
+      return [
+        { offset: 0, reverse: true },
+        { offset: '100%', reverse: false }
+      ];
 
     default:
       return [];
   }
 }
 
-function getArrowPatterns(marker, symbol, styles) {
-  var placements = getPlacements(marker.placement || "end");
+function reverseArrowHeading (arrow) {
+  return {
+    options: arrow.options,
+    buildSymbol: function (directionPoint, latLngs, map, index, total) {
+      return arrow.buildSymbol(
+        {
+          latLng: directionPoint.latLng,
+          heading: (directionPoint.heading + 180) % 360
+        },
+        latLngs,
+        map,
+        index,
+        total
+      );
+    }
+  };
+}
+
+function getArrowPatterns (marker, symbol, styles, layerOptions) {
+  var placements = getPlacements(marker.placement || 'end');
 
   if (!placements.length) {
     return [];
   }
 
-  var color = styles.color || "#3388ff";
-  var opacity = styles.opacity === undefined ? 1 : styles.opacity;
+  var color = styles.color !== undefined
+    ? styles.color
+    : (layerOptions.color !== undefined ? layerOptions.color : '#3388ff');
+  var opacity = styles.opacity !== undefined
+    ? styles.opacity
+    : (layerOptions.opacity !== undefined ? layerOptions.opacity : 1);
 
   if (marker.color) {
     color = symbol.colorValue(marker.color);
@@ -33,45 +92,58 @@ function getArrowPatterns(marker, symbol, styles) {
   }
 
   // ArcGIS size is expressed in points; Leaflet uses pixels.
-  var pixelSize = !isNaN(marker.size) ? symbol.pixelValue(marker.size) : 15;
+  var lineWeight = styles.weight !== undefined ? styles.weight : layerOptions.weight;
+  var pixelSize = !isNaN(marker.size)
+    ? symbol.pixelValue(marker.size)
+    : (!isNaN(lineWeight) ? lineWeight * 5 : 15);
+
+  var pathOptions = {
+    stroke: false,
+    fill: true,
+    color: color,
+    fillColor: color,
+    opacity: opacity,
+    fillOpacity: opacity,
+    interactive: false,
+    className: 'esri-arrow-marker'
+  };
+
+  if (layerOptions.pane !== undefined) {
+    pathOptions.pane = layerOptions.pane;
+  }
+  if (layerOptions.renderer !== undefined) {
+    pathOptions.renderer = layerOptions.renderer;
+  }
 
   var arrow = L.Symbol.arrowHead({
     pixelSize: pixelSize,
     polygon: true,
-    pathOptions: {
-      stroke: false,
-      fill: true,
-      color: color,
-      fillColor: color,
-      opacity: opacity,
-      fillOpacity: opacity,
-      interactive: false,
-    },
+    pathOptions: pathOptions
   });
 
-  return placements.map(function (offset) {
+  return placements.map(function (placement) {
     return {
-      offset: offset,
+      offset: placement.offset,
       repeat: 0,
-      symbol: arrow,
+      symbol: placement.reverse ? reverseArrowHeading(arrow) : arrow
     };
   });
 }
 
-export function attachArrowMarker(layer, feature, renderer) {
+export function attachArrowMarker (layer, feature, renderer) {
   if (!layer || !renderer || !feature.geometry) {
     return null;
   }
 
   var geometryType = feature.geometry.type;
 
-  if (geometryType !== "LineString" && geometryType !== "MultiLineString") {
+  if (geometryType !== 'LineString' && geometryType !== 'MultiLineString') {
     return null;
   }
 
   var symbol = renderer._getSymbol(feature);
 
-  if (!symbol || !symbol._marker || symbol._marker.style !== "arrow") {
+  if (!symbol || !symbol._marker || symbol._marker.style !== 'arrow') {
     return null;
   }
 
@@ -79,7 +151,7 @@ export function attachArrowMarker(layer, feature, renderer) {
   var initialStyles = renderer.style(feature);
 
   var decorator = L.polylineDecorator(layer, {
-    patterns: getArrowPatterns(marker, symbol, initialStyles),
+    patterns: getArrowPatterns(marker, symbol, initialStyles, layer.options)
   });
 
   // Keep decorator synchronized with the feature's style.
@@ -90,7 +162,9 @@ export function attachArrowMarker(layer, feature, renderer) {
     layer.setStyle = function (styles) {
       originalSetStyle.call(this, styles);
 
-      decorator.setPatterns(getArrowPatterns(marker, symbol, styles || {}));
+      decorator.setPatterns(
+        getArrowPatterns(marker, symbol, styles || {}, this.options)
+      );
 
       return this;
     };
@@ -98,7 +172,7 @@ export function attachArrowMarker(layer, feature, renderer) {
 
   // A feature can be removed from the map and added again because
   // FeatureLayer caches layers between viewport requests.
-  layer.on("add", function () {
+  layer.on('add', function () {
     if (layer._map && decorator._map !== layer._map) {
       if (decorator._map) {
         decorator.remove();
@@ -108,7 +182,7 @@ export function attachArrowMarker(layer, feature, renderer) {
     }
   });
 
-  layer.on("remove", function () {
+  layer.on('remove', function () {
     if (decorator._map) {
       decorator.remove();
     }
