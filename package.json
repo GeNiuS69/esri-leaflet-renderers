@@ -81,7 +81,7 @@
   "scripts": {
     "prebuild": "mkdirp dist",
     "build": "rollup -c profiles/debug.js & rollup -c profiles/production.js",
-    "lint": "semistandard src/**/*.js | snazzy",
+    "lint": "semistandard \"src/**/*.js\" | snazzy",
     "fix": "semistandard --fix",
     "pretest": "npm run build",
     "release": "./scripts/release.sh",

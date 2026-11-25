@@ -1,4 +1,4 @@
-/* esri-leaflet-renderers - v3.0.1 - Tue Nov 24 2026 11:16:28 GMT+0100 (Central European Standard Time)
+/* esri-leaflet-renderers - v3.0.1 - Wed Nov 25 2026 08:08:54 GMT+0100 (Central European Standard Time)
  * Copyright (c) 2026 Environmental Systems Research Institute, Inc.
  * Apache-2.0 */
 (function (global, factory) {
@@ -1457,7 +1457,7 @@
       return new L__default["default"].PolylineDecorator(paths, options);
   };
 
-  L__default["default"].Symbol.ArrowHead = L__default["default"].Symbol.ArrowHead.extend({
+  L__default["default"].Symbol.RoundedArrowHead = L__default["default"].Symbol.ArrowHead.extend({
     _buildArrowPath: function (dirPoint, map) {
       const d2r = Math.PI / 180;
       const tipPoint = map.project(dirPoint.latLng);
@@ -1490,6 +1490,10 @@
       ];
     }
   });
+
+  L__default["default"].Symbol.roundedArrowHead = function (options) {
+    return new L__default["default"].Symbol.RoundedArrowHead(options);
+  };
 
   function getPlacements (placement) {
     switch (placement) {
@@ -1571,7 +1575,7 @@
       pathOptions.renderer = layerOptions.renderer;
     }
 
-    var arrow = L__default["default"].Symbol.arrowHead({
+    var arrow = L__default["default"].Symbol.roundedArrowHead({
       pixelSize: pixelSize,
       polygon: true,
       pathOptions: pathOptions
@@ -1958,7 +1962,7 @@
   var scripts = {
   	prebuild: "mkdirp dist",
   	build: "rollup -c profiles/debug.js & rollup -c profiles/production.js",
-  	lint: "semistandard src/**/*.js | snazzy",
+  	lint: "semistandard \"src/**/*.js\" | snazzy",
   	fix: "semistandard --fix",
   	pretest: "npm run build",
   	release: "./scripts/release.sh",
